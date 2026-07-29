@@ -2,11 +2,11 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
-    <loc>https://lira-fraldas.pages.dev/</loc>
+    <loc>https://lirafraldas.com.br/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://lira-fraldas.pages.dev/banner-hero.jpg</image:loc>
+      <image:loc>https://lirafraldas.com.br/banner-hero.jpg</image:loc>
       <image:title>Lira Fraldas — fraldas e enxoval em Fortaleza</image:title>
     </image:image>
   </url>

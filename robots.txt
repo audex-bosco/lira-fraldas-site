@@ -7,4 +7,4 @@ Disallow: /01-mercadao.html
 Disallow: /02-loja-pratica.html
 Disallow: /03-boutique.html
 
-Sitemap: https://lira-fraldas.pages.dev/sitemap.xml
+Sitemap: https://lirafraldas.com.br/sitemap.xml

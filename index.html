@@ -9,11 +9,13 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-180.png">
 
 <!-- ================================================================
-     ENDEREÇO CANÔNICO DO SITE — trocar nos 5 pontos abaixo quando mudar.
-     Hoje: lira-fraldas.pages.dev (o lirafraldas.com.br está suspenso no
-     Registro.br; o pages.dev responde sempre e não deixa de existir).
+     ENDEREÇO CANÔNICO DO SITE — trocar em TODOS os pontos abaixo ao mudar:
+     canonical, og:url, og:image, twitter:image e os 3 campos do schema.org.
+     Hoje: lirafraldas.com.br (domínio normalizado em 29/07/26 — o registro
+     estava suspenso no Registro.br e o site respondia por lira-fraldas.pages.dev,
+     que segue no ar como espelho mas NÃO é mais o endereço canônico).
      ================================================================ -->
-<link rel="canonical" href="https://lira-fraldas.pages.dev/">
+<link rel="canonical" href="https://lirafraldas.com.br/">
 
 <!-- Open Graph — é isto que monta o card ao colar o link no WhatsApp/Instagram -->
 <meta property="og:type" content="website">
@@ -21,8 +23,8 @@
 <meta property="og:locale" content="pt_BR">
 <meta property="og:title" content="Lira Fraldas — Fraldas e enxoval em Fortaleza">
 <meta property="og:description" content="Fraldas, fórmulas, higiene e enxoval com entrega em Fortaleza. Monte seu pedido e finalize pelo WhatsApp.">
-<meta property="og:url" content="https://lira-fraldas.pages.dev/">
-<meta property="og:image" content="https://lira-fraldas.pages.dev/banner-hero.jpg">
+<meta property="og:url" content="https://lirafraldas.com.br/">
+<meta property="og:image" content="https://lirafraldas.com.br/banner-hero.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="721">
@@ -30,7 +32,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Lira Fraldas — Fraldas e enxoval em Fortaleza">
 <meta name="twitter:description" content="Fraldas, fórmulas, higiene e enxoval com entrega em Fortaleza. Monte seu pedido e finalize pelo WhatsApp.">
-<meta name="twitter:image" content="https://lira-fraldas.pages.dev/banner-hero.jpg">
+<meta name="twitter:image" content="https://lirafraldas.com.br/banner-hero.jpg">
 
 <!-- Dados estruturados da loja física — alimenta resultado rico do Google e o
      sinal de negócio local. Endereço/telefone/horário são os MESMOS do rodapé:
@@ -41,9 +43,9 @@
   "@type": "Store",
   "name": "Lira Fraldas",
   "description": "Loja de fraldas, fórmulas infantis, higiene e enxoval em Fortaleza/CE, com entrega e retirada na loja.",
-  "url": "https://lira-fraldas.pages.dev/",
-  "image": "https://lira-fraldas.pages.dev/banner-hero.jpg",
-  "logo": "https://lira-fraldas.pages.dev/logo-256.png",
+  "url": "https://lirafraldas.com.br/",
+  "image": "https://lirafraldas.com.br/banner-hero.jpg",
+  "logo": "https://lirafraldas.com.br/logo-256.png",
   "telephone": "+55-85-99958-7768",
   "priceRange": "$$",
   "currenciesAccepted": "BRL",
@@ -590,9 +592,10 @@
 <script src="fretes.js?v=20260707"></script>
 <script>
   const WA="5585999587768"; // WhatsApp oficial da Lira Fraldas
-  // API do ERP para registrar o pre-pedido. Trocar quando o lirafraldas.com.br
-  // voltar do Registro.br (hoje NXDOMAIN — ver P-690).
-  const API_BASE="https://erp-lira.audex.com.br";
+  // API do ERP para registrar o pre-pedido. Dominio normalizado em 29/07/26.
+  // ATENCAO: a origem precisa estar no CORS_ORIGIN da API — hoje o apex passa,
+  // o www NAO (por isso o www deve redirecionar 301 pro apex no Cloudflare).
+  const API_BASE="https://erp.lirafraldas.com.br";
   // Chave publica do site (Empresa.siteApiKey). Fica visivel no JS por
   // natureza — site estatico. So permite CRIAR pre-venda PENDENTE, e a rota
   // tem rate-limit; o abuso possivel e spam de pedido, nao vazamento de dado.
