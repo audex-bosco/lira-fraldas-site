@@ -6,7 +6,7 @@
    - SÓ intercepta same-origin  -> não toca em wa.me / instagram / terceiros.
    - Não cacheia POST nem query de navegação externa.
 */
-const CACHE = 'lira-loja-v1';
+const CACHE = 'lira-loja-v2';
 const CORE = [
   '/02-loja-pratica.html',
   '/produtos.js',
