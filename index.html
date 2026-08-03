@@ -714,9 +714,10 @@
   };
 
   // ===== Quick-view do produto (abre ao clicar no card) =====
-  let _pvTrigger=null;
+  let _pvTrigger=null, _pvAberto=null;
   window.openProd=(id)=>{
     const p=prods[id]; if(!p)return;
+    _pvAberto=+id; // qual produto esta no modal — o sync de estoque precisa saber
     _pvTrigger=document.activeElement;
     const emo=EMO[p.d]||'🛒';
     const inner=p.f
@@ -745,6 +746,7 @@
     setTimeout(()=>{const x=document.querySelector("#pv .pv-x");if(x)x.focus();},50);
   };
   window.closeProd=()=>{
+    _pvAberto=null;
     document.getElementById("pv-ov").classList.remove("open");
     // só libera o scroll do fundo se o carrinho também não estiver aberto
     if(!document.getElementById("cart-p").classList.contains("open"))document.body.style.overflow="";
@@ -910,11 +912,24 @@
         observacao:(pg?`Forma preferida: ${pg.t}`:"").slice(0,500),
         idempotencyKey:`site-${Date.now()}-${Math.random().toString(36).slice(2,10)}`
       })
-    }).then(r=>r.ok?r.json():null).then(j=>{
+    }).then(r=>r.json().then(j=>({ok:r.ok,j})).catch(()=>({ok:r.ok,j:null}))).then(({ok,j})=>{
       clearTimeout(t);
-      const txt=(j&&j.numero)
-        ? `*PEDIDO #${j.numero}* (ja registrado no sistema)\n\n`+msg
-        : msg;
+      // O ERP confere o estoque na hora do pedido (vendas/permitirPedidoSemEstoque
+      // = false) e devolve `avisos[]` com o que removeu ou ajustou — tanto no 201
+      // quanto no 422, que é a resposta quando NENHUM item sobrou.
+      // Até 03/08/26 o site lia só `j.numero` e, no 422, `r.ok` era false e o corpo
+      // virava null: o cliente recebia o carrinho inteiro no WhatsApp como se o
+      // pedido tivesse ido — inclusive itens que o servidor tinha acabado de
+      // recusar por falta de estoque. É o pior caso, porque ele acha que comprou.
+      const avisos=(j&&Array.isArray(j.avisos)?j.avisos:[]).slice(0,8);
+      const bloco=avisos.length
+        ? `⚠️ *ATENÇÃO — o sistema ajustou este pedido:*\n${avisos.map(a=>"• "+a).join("\n")}\n\n`
+        : "";
+      // Só afirma "registrado" quando o ERP devolveu número de pedido de verdade.
+      const txt=(ok&&j&&j.numero)
+        ? bloco+`*PEDIDO #${j.numero}* (já registrado no sistema)\n\n`+msg
+        : bloco+msg;
+      if(avisos.length)toast("⚠️ O estoque mudou — veja o aviso na mensagem");
       if(aba) aba.location.href=`https://wa.me/${WA}?text=`+encodeURIComponent(txt);
       else abrirWhats(txt);
     }).catch(()=>{
@@ -937,7 +952,7 @@
     return "";
   }
 
-  const card=(p)=>`<article class="prod" role="button" tabindex="0" aria-label="Ver detalhes: ${p.n}" onclick="openProd(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openProd(${p.id})}">
+  const card=(p)=>`<article class="prod" data-id="${p.id}" role="button" tabindex="0" aria-label="Ver detalhes: ${p.n}" onclick="openProd(${p.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openProd(${p.id})}">
     ${p.esgotado?'<span class="tag-esgotado">Esgotado</span>':(p.e>0&&p.e<=5?'<span class="tag">Últimas</span>':'')}
     <button class="fav-btn${favs.has(p.id)?' on':''}" aria-label="Favoritar ${p.n}" aria-pressed="${favs.has(p.id)}" onclick="event.stopPropagation();toggleFav(${p.id},this)">${favs.has(p.id)?'❤️':'🤍'}</button>
     <div class="pimg${p.f?' has-photo':''}">${p.f?`<img src="fotos/${p.f}" alt="${p.n}" loading="lazy" onerror="this.parentNode.classList.remove('has-photo');this.replaceWith(document.createTextNode(EMO['${p.d.replace(/'/g,"\\'")}']||'🛒'))">`:(EMO[p.d]||'🛒')}</div>
@@ -1027,6 +1042,74 @@
     sec.style.display="";
   })();
   updateCart(); // restaura badge/itens do localStorage
+
+  // ===== Estoque em tempo real (03/08/26) =====
+  // POR QUE EXISTE: produtos.js é um SNAPSHOT. Ele fica até 4h preso no cache do
+  // navegador (Cloudflare Pages serve max-age=14400 e a tag <script> não tem
+  // versão na URL) enquanto o ERP regera o catálogo a cada 2-3 min. Medido em
+  // 03/08/26: dois clientes viam estoques diferentes, e um deles conseguia
+  // adicionar ao carrinho algo já esgotado. O ERP recusa o item
+  // (config vendas/permitirPedidoSemEstoque = false), mas o site ainda assim
+  // dizia "pedido registrado" — ver o tratamento de `avisos` no envio do pedido.
+  // Agora produtos.js é só o ESQUELETO (nome, foto, preço — mudam devagar) e o
+  // ESTOQUE vem vivo de GET /api/public/produtos (cache de 30s na própria API).
+  const SYNC_MS=30000;
+  let _syncando=false;
+  async function sincronizarEstoque(){
+    if(_syncando||!API_BASE)return;
+    _syncando=true;
+    const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),8000);
+    try{
+      const r=await fetch(`${API_BASE}/api/public/produtos`,{signal:ctrl.signal});
+      if(!r.ok)return;
+      const j=await r.json();
+      const lista=(j&&j.produtos)||[];
+      // Guarda anti-desastre: resposta curta demais (deploy pela metade, filtro
+      // errado, banco vazio) NÃO pode esgotar a loja inteira. Sem isto, um 200
+      // com lista vazia apagaria a vitrine — que foi exatamente o estado desta
+      // rota até 03/08/26, quando ela devolvia 0 de 722 produtos.
+      if(lista.length<prods.length*0.5)return;
+      const vivo=new Map();
+      for(const x of lista)vivo.set(x.id,Number(x.estoque)||0);
+      // Segunda guarda, e a que realmente importa: tamanho de lista não prova
+      // que os ids CASAM. A rota deduplica por SKU e descarta o id perdedor, e
+      // filtra por empresaId — dois filtros que o gerador do produtos.js não tem.
+      // Se um dia divergirem, o produto sumido viraria esgotado para sempre e em
+      // silêncio. Abaixo de 90% de casamento não há sincronia confiável.
+      let casaram=0;
+      for(const p of prods)if(vivo.has(p.i))casaram++;
+      if(casaram<prods.length*0.9)return;
+      const mudou=[];
+      for(const p of prods){
+        // Ausente da resposta: NÃO marca esgotado. Tirar produto da vitrine é
+        // trabalho do rebuild, que refaz o produtos.js em 2-3 min. Tratar ausência
+        // como zero aqui criaria esgotado falso — e falso esgotado é venda perdida
+        // que ninguém vê acontecer.
+        if(!vivo.has(p.i))continue;
+        const e=vivo.get(p.i);
+        const esg=!(e>0);
+        if(p.e===e&&!!p.esgotado===esg)continue;
+        p.e=e; p.esgotado=esg; mudou.push(p);
+      }
+      if(!mudou.length)return;
+      // Troca só os cards afetados: repintar a grade inteira perderia a rolagem
+      // e o "carregar mais" de quem já estava navegando.
+      for(const p of mudou){
+        document.querySelectorAll(`article.prod[data-id="${p.id}"]`).forEach(el=>{el.outerHTML=card(p);});
+      }
+      if(_pvAberto!=null&&mudou.some(p=>p.id===_pvAberto))window.openProd(_pvAberto);
+      // Casa por id do ERP, não pela chave do carrinho: a chave é o índice do
+      // array do produtos.js, que muda de posição a cada rebuild.
+      const noCarrinho=mudou.filter(p=>p.esgotado&&Object.values(cart).some(it=>it.i===p.i));
+      if(noCarrinho.length)toast(noCarrinho.length===1?"⚠️ Um item do seu carrinho esgotou":`⚠️ ${noCarrinho.length} itens do seu carrinho esgotaram`);
+    }catch(e){
+      // Offline ou API fora: mantém o snapshot. Nunca esvazia a loja por falha de rede.
+    }finally{clearTimeout(t);_syncando=false;}
+  }
+  sincronizarEstoque();
+  setInterval(sincronizarEstoque,SYNC_MS);
+  // Aba que volta do segundo plano pode ter ficado horas parada — resincroniza já.
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)sincronizarEstoque();});
 
   // PWA: registra o service worker (só https/produção; falha silenciosa em file://)
   if("serviceWorker" in navigator){

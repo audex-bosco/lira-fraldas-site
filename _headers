@@ -1,0 +1,23 @@
+# Cloudflare Pages — cabeçalhos por rota.
+#
+# POR QUE EXISTE (03/08/26): sem este arquivo o Pages aplica o padrão dele,
+# `public, max-age=14400, must-revalidate` — 4 HORAS. Como a tag no HTML é
+# <script src="produtos.js"> sem versão na URL (diferente das fotos, que levam
+# ?v=<hash>), cada navegador ficava preso a um retrato do catálogo por até 4h
+# enquanto o ERP o regerava a cada 2-3 min. Dois clientes navegando ao mesmo
+# tempo viam estoques diferentes, e um deles conseguia pedir item esgotado.
+#
+# O estoque agora vem vivo da API (GET /api/public/produtos, 30s), então isto
+# aqui é rede de segurança: mantém o esqueleto fresco para quem estiver com
+# JS/API indisponível, e limita a divergência a 1 minuto em vez de 4 horas.
+
+/produtos.js
+  Cache-Control: public, max-age=60, must-revalidate
+
+/fretes.js
+  Cache-Control: public, max-age=60, must-revalidate
+
+# O worker de service precisa ser sempre reavaliado, senão uma correção nele
+# (como a do fallback offline, nesta mesma leva) demora a chegar no cliente.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate

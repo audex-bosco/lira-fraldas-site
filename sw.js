@@ -6,9 +6,12 @@
    - SÓ intercepta same-origin  -> não toca em wa.me / instagram / terceiros.
    - Não cacheia POST nem query de navegação externa.
 */
-const CACHE = 'lira-loja-v2';
+const CACHE = 'lira-loja-v3';
 const CORE = [
-  '/02-loja-pratica.html',
+  // A loja é a raiz (index.html). Até 03/08/26 este pré-cache e o fallback offline
+  // abaixo ainda apontavam para '/02-loja-pratica.html', uma versão anterior da
+  // loja: quem ficasse offline caía numa página que não é mais a oficial.
+  '/',
   '/produtos.js',
   '/logo.png',
   '/manifest.webmanifest',
@@ -47,7 +50,7 @@ self.addEventListener('fetch', (e) => {
           caches.open(CACHE).then((c) => c.put(req, copy));
           return r;
         })
-        .catch(() => caches.match(req).then((r) => r || caches.match('/02-loja-pratica.html')))
+        .catch(() => caches.match(req).then((r) => r || caches.match('/')))
     );
   } else {
     // cache-first: estáticos (fotos, logo, ícones)
