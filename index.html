@@ -191,7 +191,7 @@
   .off{background:var(--mint-soft);color:var(--mint-deep);font-size:10px;font-weight:700;border-radius:6px;padding:1px 6px;white-space:nowrap}
   .pv-avista{font-size:15px;color:var(--mint-deep);font-weight:700;margin-bottom:14px}
   .pv-avista b{font-size:19px}
-  .cart-avista{display:flex;align-items:baseline;justify-content:space-between;font-size:13px;color:var(--mint-deep);font-weight:700;margin-top:3px}
+  .cart-avista{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:3px 8px;font-size:13px;color:var(--mint-deep);font-weight:700;margin-top:3px}
   .buy{margin-top:auto;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--wa);color:#fff;font-weight:700;font-size:14px;border:0;border-radius:10px;padding:11px;cursor:pointer;transition:.15s}
   .buy:hover{background:var(--wa-deep)}
   .more{display:block;margin:22px auto 0;background:#fff;border:1.5px solid var(--navy);color:var(--navy);font-weight:800;font-size:14px;padding:12px 28px;border-radius:999px;cursor:pointer}
@@ -574,7 +574,7 @@
     <div class="cart-f">
       <div class="cart-frete" id="cart-frete"></div>
       <div class="cart-sub cart-total-final"><span>Total no cartão</span><b id="cart-total-final">R$ 0,00</b></div>
-      <div class="cart-avista"><span>💳 No cartão (até 2x)</span><b id="cart-avista">R$ 0,00</b></div>
+      <div class="cart-avista"><span id="cart-cartao-label">💳 No cartão (até 2x)</span><b id="cart-avista">R$ 0,00</b></div>
       <div class="cart-btns">
         <button type="button" class="cart-back" onclick="goStep(1,true)">← Voltar</button>
         <button class="cart-cta" id="cart-cta" onclick="finalizarPedido()">💬 Finalizar pedido no WhatsApp</button>
@@ -636,7 +636,8 @@
     const entregaLines=receiptLines(ctx,data.entrega||"A combinar",W-pad*2);
     const itemLines=data.items.flatMap(i=>receiptLines(ctx,`${i.q}x ${i.n} — ${i.p}`,W-pad*2));
     const avisoLines=(data.avisos||[]).flatMap(a=>receiptLines(ctx,"Atenção: "+a,W-pad*2));
-    const H=Math.max(820,390+(clienteLines.length+entregaLines.length+itemLines.length+avisoLines.length)*line+150);
+    const simulacaoLines=data.simulacao?receiptLines(ctx,data.simulacao,W-pad*2):[];
+    const H=Math.max(820,390+(clienteLines.length+entregaLines.length+itemLines.length+avisoLines.length+simulacaoLines.length)*line+150);
     canvas.width=W;canvas.height=H; ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);
     ctx.fillStyle="#33415A";ctx.fillRect(0,0,W,18);
     ctx.fillStyle="#33415A";ctx.font="700 42px Arial";ctx.fillText("Lira Fraldas",pad,78);
@@ -651,6 +652,7 @@
     y+=24;ctx.strokeStyle="#DDE4EC";ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);ctx.stroke();y+=52;
     ctx.font="700 31px Arial";ctx.fillText((data.avisos&&data.avisos.length?"Total solicitado: ":"Total: ")+data.total,pad,y);
     y+=45;ctx.font="500 22px Arial";ctx.fillStyle="#64748B";ctx.fillText("Preferência de pagamento: "+data.pagamento,pad,y);
+    if(simulacaoLines.length){y+=line;ctx.fillStyle="#1A7A66";ctx.font="700 22px Arial";simulacaoLines.forEach(l=>{ctx.fillText(l,pad,y);y+=line;});}
     y+=66;ctx.fillStyle="#33415A";ctx.font="700 20px Arial";ctx.fillText("Guarde o número do pedido para acompanhamento.",pad,y);
     y+=34;ctx.font="500 18px Arial";ctx.fillStyle="#64748B";ctx.fillText("Confirmação final e disponibilidade: atendimento Lira.",pad,y);
     canvas.toBlob(blob=>{receiptBlob=blob;},"image/png");
@@ -734,6 +736,7 @@
   // Total do carrinho no cartão: soma item a item pelo preço de cartão de CADA
   // produto (um item pode ter exceção de preço e outro não) — nunca por % global.
   const cartTotalCartao=()=>Object.values(cart).reduce((s,i)=>s+((i.c&&i.c>i.v)?i.c:i.v)*i.q,0);
+  const pagamentoNoCredito=()=>formaPagamento==="credito"||formaPagamento==="parcelado";
   const cartCount=()=>Object.values(cart).reduce((s,i)=>s+i.q,0);
   const cartTotal=()=>Object.values(cart).reduce((s,i)=>s+i.v*i.q,0);
   const saveCart=()=>localStorage.setItem("lira-cart",JSON.stringify(cart));
@@ -921,7 +924,15 @@
     const avRow=document.querySelector(".cart-avista"); if(avRow)avRow.style.display=AVISTA_ON?"":"none";
     // Total no cartão soma o preço de cartão de CADA item (respeita exceção por
     // produto); o frete não leva acréscimo — é serviço, não passa em adquirente.
-    const av=document.getElementById("cart-avista"); if(av&&AVISTA_ON)av.textContent=fmt(cartTotalCartao()+(fi.frete||0));
+    const totalCartao=cartTotalCartao()+(fi.frete||0);
+    const acrescimoCartao=totalCartao-(sub+(fi.frete||0));
+    const av=document.getElementById("cart-avista"); if(av&&AVISTA_ON)av.textContent=pagamentoNoCredito()?`${fmt(totalCartao)} · ${MAX_PARCELAS}x de ${fmt(parcelaDe(totalCartao))}`:fmt(totalCartao);
+    const cartaoLabel=document.getElementById("cart-cartao-label");
+    if(cartaoLabel&&AVISTA_ON){
+      cartaoLabel.textContent=pagamentoNoCredito()
+        ? `💳 ${formaPagamento==="parcelado"?"Parcelado no crédito":"No crédito"} · acréscimo ${fmt(acrescimoCartao)} (até ${MAX_PARCELAS}x)`
+        : `💳 No cartão (até ${MAX_PARCELAS}x)`;
+    }
     document.getElementById("cart-cta").disabled=!items.length;
     const nx=document.getElementById("cart-next"); if(nx)nx.disabled=!items.length;
     // esvaziou o carrinho estando no passo 2? volta pro passo 1
@@ -942,7 +953,7 @@
     const el=document.getElementById("pays"); if(!el)return;
     el.innerHTML=PAGAMENTOS.map(p=>`<button type="button" class="pay${formaPagamento===p.v?' on':''}" role="radio" aria-checked="${formaPagamento===p.v}" onclick="setPagamento('${p.v}')">${p.t}</button>`).join("");
   }
-  window.setPagamento=(v)=>{formaPagamento=(formaPagamento===v?"":v);localStorage.setItem("lira-pay",formaPagamento);renderPagamentos();};
+  window.setPagamento=(v)=>{formaPagamento=(formaPagamento===v?"":v);localStorage.setItem("lira-pay",formaPagamento);renderPagamentos();updateCart();};
   // TODO PinPDV: quando integrar cartão (débito/crédito/parcelado) via PinPDV (pinpad Audex),
   // usar getFormaPagamento() aqui para acionar o pinpad/checkout de cartão em vez de só WhatsApp.
 
@@ -961,6 +972,11 @@
     const bLabel=bairroEntrega&&window.LIRA_FRETE.bairros[bairroEntrega]?window.LIRA_FRETE.bairros[bairroEntrega].label:"";
     const temFrete=!retirada&&bLabel&&(fi.frete>0||fi.cls==="free");
     const freteVal=temFrete?(fi.frete||0):0;
+    const totalCartao=cartTotalCartao()+freteVal;
+    const acrescimoCartao=totalCartao-(sub+freteVal);
+    const simulacaoCredito=AVISTA_ON&&pagamentoNoCredito()
+      ? `\n*Simulação no crédito:* ${fmt(totalCartao)} (acréscimo de ${fmt(acrescimoCartao)}) em até ${MAX_PARCELAS}x de ${fmt(parcelaDe(totalCartao))}`
+      : "";
     let msg="Olá, Lira Fraldas! 👋 Quero fazer um pedido:\n";
     if(dados.nome)msg+=`👤 *Cliente:* ${dados.nome}\n`;
     msg+="\n";
@@ -974,7 +990,7 @@
       msg+=temFrete?(fi.frete===0?"\nFrete: grátis 🎉":`\nFrete: ${fmt(fi.frete)}`):"\nEntrega: combinar o frete pelo meu bairro";
     }
     msg+=`\n*Total${AVISTA_ON?" à vista (Pix ou dinheiro)":""}: ${fmt(sub+freteVal)}*`;
-    if(AVISTA_ON)msg+=`\n*Total no cartão: ${fmt(cartTotalCartao()+freteVal)}* (até ${MAX_PARCELAS}x de ${fmt(parcelaDe(cartTotalCartao()+freteVal))})`;
+    msg+=simulacaoCredito;
     msg+="\nForma de pagamento: "+(pg?pg.t:"(a combinar)");
 
     // ── Pre-pedido no ERP (best-effort) ─────────────────────────────────────
@@ -1025,7 +1041,7 @@
       // Só afirma "registrado" quando o ERP devolveu número de pedido de verdade.
       const registrado=ok&&j&&j.numero;
       const txt=registrado
-        ? `Olá, Lira Fraldas! Meu pedido *#${j.numero}* já foi registrado no sistema.\n*Total solicitado:* ${fmt(Number(j.total))}\n*Forma de pagamento selecionada:* ${pg?pg.t:"A combinar"}\n\nEsta é a referência para consulta no ERP. A confirmação do pagamento é feita pela loja.`
+        ? `Olá, Lira Fraldas! Meu pedido *#${j.numero}* já foi registrado no sistema.\n*Total solicitado:* ${fmt(Number(j.total))}${simulacaoCredito}\n*Forma de pagamento selecionada:* ${pg?pg.t:"A combinar"}\n\nEsta é a referência para consulta no ERP. A confirmação do pagamento é feita pela loja.`
         : bloco+msg;
       if(registrado){
         if(aba)aba.close();
@@ -1035,7 +1051,7 @@
         items:(j.itens||[]).map(i=>({q:Number(i.quantidade),n:i.nome,p:fmt(Number(i.precoUnitario))})),
         nome:j.cliente&&j.cliente.nome,
         entrega:j.entrega&&j.entrega.tipo==="RETIRADA"?"Retirada na loja":(j.entrega&&[j.entrega.endereco,j.entrega.bairro].filter(Boolean).join(" — "))||"Entrega a combinar",
-        total:fmt(Number(j.total)),pagamento:pg?pg.t:"A combinar",avisos
+        total:fmt(Number(j.total)),pagamento:pg?pg.t:"A combinar",simulacao:simulacaoCredito.replace(/^\n\*Simulação no crédito:\*\s*/,""),avisos
         },txt);
       }
       if(avisos.length)toast("⚠️ O estoque mudou — veja o aviso na mensagem");
