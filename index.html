@@ -552,7 +552,7 @@
       <div class="cart-entrega" id="cart-entrega-box">
         <label for="cart-cep">Entrega — informe seu CEP ou bairro</label>
         <div class="cep-row">
-          <input id="cart-cep" inputmode="numeric" maxlength="9" placeholder="CEP (opcional)" oninput="maskCep(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();consultarCep()}">
+          <input id="cart-cep" inputmode="numeric" maxlength="9" placeholder="CEP (opcional)" oninput="maskCep(this);setDado('cep',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();consultarCep()}">
           <button type="button" onclick="consultarCep()">Buscar</button>
         </div>
         <select id="cart-bairro" aria-label="Bairro de entrega" onchange="setBairro(this.value)"></select>
@@ -843,9 +843,9 @@
   }
   window.setBairro=(k)=>{bairroEntrega=k||"";localStorage.setItem("lira-bairro",bairroEntrega);updateCart();};
   // ===== Dados do cliente (nome + endereço) — persistidos e enviados no pedido =====
-  const dados={nome:localStorage.getItem("lira-nome")||"",fone:localStorage.getItem("lira-fone")||"",rua:localStorage.getItem("lira-rua")||"",num:localStorage.getItem("lira-num")||""};
+  const dados={nome:localStorage.getItem("lira-nome")||"",fone:localStorage.getItem("lira-fone")||"",cep:localStorage.getItem("lira-cep")||"",rua:localStorage.getItem("lira-rua")||"",num:localStorage.getItem("lira-num")||""};
   window.setDado=(k,v)=>{dados[k]=(v||"").trim();localStorage.setItem("lira-"+k,dados[k]);};
-  function prefillDados(){const map={nome:"cart-nome",fone:"cart-fone",rua:"cart-rua",num:"cart-num"};for(const k in map){const el=document.getElementById(map[k]);if(el&&dados[k])el.value=dados[k];}}
+  function prefillDados(){const map={nome:"cart-nome",fone:"cart-fone",cep:"cart-cep",rua:"cart-rua",num:"cart-num"};for(const k in map){const el=document.getElementById(map[k]);if(el&&dados[k])el.value=dados[k];}}
   // ===== Entrega x Retirada na loja =====
   let modoEntrega=localStorage.getItem("lira-modo")||"entrega";
   function renderModo(){
@@ -874,6 +874,7 @@
         const rua=document.getElementById("cart-rua");
         if(rua){rua.value=j.logradouro.trim();setDado("rua",rua.value);}
       }
+      setDado("cep",el.value);
       const k=window.LIRA_FRETE_norm(j.bairro);
       if(window.LIRA_FRETE.bairros[k]){bairroEntrega=k;localStorage.setItem("lira-bairro",k);renderBairros();updateCart();}
       else{fr.textContent=`Bairro "${j.bairro}" fora da lista — escolha o mais próximo na lista ou combine pelo WhatsApp.`;fr.className="cart-frete warn";}
@@ -993,7 +994,7 @@
     const aba=window.open("","_blank");
     const entrega=retirada
       ? {tipo:"RETIRADA"}
-      : {tipo:"ENTREGA",bairro:bLabel||undefined,
+      : {tipo:"ENTREGA",cep:dados.cep||undefined,bairro:bLabel||undefined,
          endereco:[dados.rua&&`${dados.rua}${dados.num?`, ${dados.num}`:""}`].filter(Boolean).join("")||undefined,
          cidade:"Fortaleza",uf:"CE"};
     const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),8000);
@@ -1004,7 +1005,7 @@
         itens:itensApi,
         cliente:{nome:dados.nome||"Cliente do site",telefone:fone},
         entrega,
-        observacao:(pg?`Forma preferida: ${pg.t}`:"").slice(0,500),
+        formaPagamentoPreferida:pg?.t||undefined,
         idempotencyKey:`site-${Date.now()}-${Math.random().toString(36).slice(2,10)}`
       })
     }).then(r=>r.json().then(j=>({ok:r.ok,j})).catch(()=>({ok:r.ok,j:null}))).then(({ok,j})=>{
