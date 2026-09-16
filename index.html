@@ -620,8 +620,9 @@
   const SITE_KEY="lira_a96d4d6e4c22f773bcf01374d00ba4118f260afebfdb62d9";
 
   // O texto pré-preenchido no WhatsApp é editável por definição. Por isso ele
-  // deixa de carregar preço/itens após o ERP criar a pré-venda: a referência
-  // #numero é o que a loja consulta, e o cliente recebe este cupom em PNG.
+  // deixa de carregar itens após o ERP criar a pré-venda: a referência
+  // #numero é o que a loja consulta. O total e a preferência seguem no texto
+  // para orientar o atendimento, além do cupom em PNG do cliente.
   let receiptBlob=null,receiptFileName="cupom-lira.png",receiptWhatsText="";
   function receiptLines(ctx,text,maxWidth){
     const words=String(text||"").split(/\s+/); const lines=[]; let line="";
@@ -1024,7 +1025,7 @@
       // Só afirma "registrado" quando o ERP devolveu número de pedido de verdade.
       const registrado=ok&&j&&j.numero;
       const txt=registrado
-        ? `Olá, Lira Fraldas! Meu pedido *#${j.numero}* já foi registrado no sistema. Esta é a referência para consulta no ERP.`
+        ? `Olá, Lira Fraldas! Meu pedido *#${j.numero}* já foi registrado no sistema.\n*Total solicitado:* ${fmt(Number(j.total))}\n*Forma de pagamento selecionada:* ${pg?pg.t:"A combinar"}\n\nEsta é a referência para consulta no ERP. A confirmação do pagamento é feita pela loja.`
         : bloco+msg;
       if(registrado){
         if(aba)aba.close();
