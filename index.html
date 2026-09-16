@@ -359,6 +359,16 @@
   .cart-back:hover{background:var(--mint-soft);border-color:var(--mint)}
   .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--navy);color:#fff;padding:12px 22px;border-radius:999px;font-size:14px;font-weight:600;z-index:70;opacity:0;pointer-events:none;transition:.22s;box-shadow:0 8px 24px rgba(38,50,74,.35)}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* Cupom do pedido: o conteúdo comercial fica no ERP; a imagem é o resumo para o cliente. */
+  .receipt-ov{position:fixed;inset:0;background:rgba(38,50,74,.62);z-index:80;display:none;place-items:center;padding:18px}
+  .receipt-ov.open{display:grid}
+  .receipt{position:relative;width:min(390px,100%);max-height:calc(100vh - 36px);overflow:auto;background:#fff;border-radius:20px;padding:18px;box-shadow:0 18px 55px rgba(20,30,48,.35)}
+  .receipt h2{margin:0 34px 4px 0;color:var(--navy);font-size:21px}.receipt p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.4}
+  .receipt-close{position:absolute;right:18px;top:16px;border:0;background:transparent;color:var(--navy);font-size:25px;line-height:1;cursor:pointer}
+  .receipt-preview{display:block;width:100%;border:1px solid var(--line);border-radius:10px;background:#fff;margin:12px 0}
+  .receipt-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.receipt-actions button{border:0;border-radius:11px;padding:12px 10px;font:700 13px var(--font);cursor:pointer}.receipt-share{background:var(--wa);color:#fff}.receipt-save{background:var(--mint-soft);color:var(--mint-deep)}
+  .receipt-wa{grid-column:1/-1;background:var(--navy);color:#fff}
+  .receipt-note{margin-top:12px!important;font-size:12px!important}
 
   /* ===== Forma de pagamento (carrinho + rodapé) ===== */
   .cart-pay{margin:0 0 12px}
@@ -580,6 +590,22 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<!-- O cupom só é exibido após o ERP devolver um número de pedido. -->
+<div class="receipt-ov" id="receipt-ov" role="presentation" onclick="if(event.target===this)closeReceipt()">
+  <section class="receipt" role="dialog" aria-modal="true" aria-labelledby="receipt-title">
+    <button class="receipt-close" type="button" onclick="closeReceipt()" aria-label="Fechar cupom">×</button>
+    <h2 id="receipt-title">Seu pedido foi registrado</h2>
+    <p>Envie este cupom como imagem se a loja pedir. A referência abaixo é consultada diretamente no sistema.</p>
+    <canvas class="receipt-preview" id="receipt-canvas" aria-label="Cupom do pedido"></canvas>
+    <div class="receipt-actions">
+      <button class="receipt-share" type="button" onclick="shareReceipt()">↗ Compartilhar cupom</button>
+      <button class="receipt-save" type="button" onclick="downloadReceipt()">↓ Salvar imagem</button>
+      <button class="receipt-wa" type="button" onclick="openReceiptWhats()">💬 Abrir WhatsApp com a referência</button>
+    </div>
+    <p class="receipt-note">Este é um resumo do pedido. A disponibilidade e a confirmação final são feitas pela Lira no ERP.</p>
+  </section>
+</div>
+
 <script src="produtos.js"></script>
 <script src="fretes.js?v=20260707"></script>
 <script>
@@ -592,6 +618,61 @@
   // natureza — site estatico. So permite CRIAR pre-venda PENDENTE, e a rota
   // tem rate-limit; o abuso possivel e spam de pedido, nao vazamento de dado.
   const SITE_KEY="lira_a96d4d6e4c22f773bcf01374d00ba4118f260afebfdb62d9";
+
+  // O texto pré-preenchido no WhatsApp é editável por definição. Por isso ele
+  // deixa de carregar preço/itens após o ERP criar a pré-venda: a referência
+  // #numero é o que a loja consulta, e o cliente recebe este cupom em PNG.
+  let receiptBlob=null,receiptFileName="cupom-lira.png",receiptWhatsText="";
+  function receiptLines(ctx,text,maxWidth){
+    const words=String(text||"").split(/\s+/); const lines=[]; let line="";
+    for(const word of words){const next=line?line+" "+word:word;if(line&&ctx.measureText(next).width>maxWidth){lines.push(line);line=word;}else line=next;}
+    if(line)lines.push(line); return lines;
+  }
+  function drawReceipt(data){
+    const canvas=document.getElementById("receipt-canvas"),ctx=canvas.getContext("2d");
+    const W=900,pad=58,line=34; ctx.font="500 25px Arial";
+    const clienteLines=receiptLines(ctx,data.nome||"Cliente do site",W-pad*2);
+    const entregaLines=receiptLines(ctx,data.entrega||"A combinar",W-pad*2);
+    const itemLines=data.items.flatMap(i=>receiptLines(ctx,`${i.q}x ${i.n} — ${i.p}`,W-pad*2));
+    const avisoLines=(data.avisos||[]).flatMap(a=>receiptLines(ctx,"Atenção: "+a,W-pad*2));
+    const H=Math.max(820,390+(clienteLines.length+entregaLines.length+itemLines.length+avisoLines.length)*line+150);
+    canvas.width=W;canvas.height=H; ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="#33415A";ctx.fillRect(0,0,W,18);
+    ctx.fillStyle="#33415A";ctx.font="700 42px Arial";ctx.fillText("Lira Fraldas",pad,78);
+    ctx.fillStyle="#1A7A66";ctx.font="700 28px Arial";ctx.fillText("PEDIDO #"+data.numero,pad,121);
+    ctx.fillStyle="#64748B";ctx.font="500 22px Arial";ctx.fillText("Registrado em "+new Date().toLocaleString("pt-BR"),pad,158);
+    ctx.strokeStyle="#DDE4EC";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pad,184);ctx.lineTo(W-pad,184);ctx.stroke();
+    let y=226; ctx.fillStyle="#33415A";ctx.font="700 24px Arial";ctx.fillText("Cliente",pad,y);y+=32;ctx.font="500 24px Arial";clienteLines.forEach(l=>{ctx.fillText(l,pad,y);y+=line;});
+    y+=12;ctx.font="700 24px Arial";ctx.fillText("Entrega",pad,y);y+=32;ctx.font="500 24px Arial";entregaLines.forEach(l=>{ctx.fillText(l,pad,y);y+=line;});
+    y+=20;ctx.font="700 24px Arial";ctx.fillText("Itens do pedido",pad,y); y+=35;ctx.font="500 23px Arial";
+    itemLines.forEach(l=>{ctx.fillText(l,pad,y);y+=line;});
+    if(avisoLines.length){y+=12;ctx.fillStyle="#A16207";ctx.font="700 22px Arial";avisoLines.forEach(l=>{ctx.fillText(l,pad,y);y+=line;});ctx.fillStyle="#33415A";}
+    y+=24;ctx.strokeStyle="#DDE4EC";ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);ctx.stroke();y+=52;
+    ctx.font="700 31px Arial";ctx.fillText((data.avisos&&data.avisos.length?"Total solicitado: ":"Total: ")+data.total,pad,y);
+    y+=45;ctx.font="500 22px Arial";ctx.fillStyle="#64748B";ctx.fillText("Preferência de pagamento: "+data.pagamento,pad,y);
+    y+=66;ctx.fillStyle="#33415A";ctx.font="700 20px Arial";ctx.fillText("Guarde o número do pedido para acompanhamento.",pad,y);
+    y+=34;ctx.font="500 18px Arial";ctx.fillStyle="#64748B";ctx.fillText("Confirmação final e disponibilidade: atendimento Lira.",pad,y);
+    canvas.toBlob(blob=>{receiptBlob=blob;},"image/png");
+  }
+  function showReceipt(data,whatsText){
+    receiptFileName=`pedido-lira-${data.numero}.png`;receiptBlob=null;drawReceipt(data);
+    receiptWhatsText=whatsText||"";
+    document.getElementById("receipt-title").textContent=data.avisos&&data.avisos.length?"Pedido ajustado pelo sistema":"Seu pedido foi registrado";
+    document.getElementById("receipt-ov").classList.add("open");
+    setTimeout(()=>document.querySelector(".receipt-close")?.focus(),0);
+  }
+  window.closeReceipt=()=>document.getElementById("receipt-ov").classList.remove("open");
+  window.openReceiptWhats=()=>{if(receiptWhatsText)window.open(`https://wa.me/${WA}?text=`+encodeURIComponent(receiptWhatsText),"_blank");};
+  window.downloadReceipt=()=>{
+    const canvas=document.getElementById("receipt-canvas");
+    const save=blob=>{if(!blob)return;const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=receiptFileName;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
+    if(receiptBlob)save(receiptBlob);else canvas.toBlob(save,"image/png");
+  };
+  window.shareReceipt=async()=>{
+    const canvas=document.getElementById("receipt-canvas");
+    const share=async blob=>{if(!blob)return downloadReceipt();const file=new File([blob],receiptFileName,{type:"image/png"});if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){try{await navigator.share({title:"Cupom Lira Fraldas",text:"Cupom do meu pedido na Lira Fraldas",files:[file]});return;}catch(e){if(e.name==="AbortError")return;}}downloadReceipt();};
+    if(receiptBlob)share(receiptBlob);else canvas.toBlob(share,"image/png");
+  };
 
   function pedir(nome,preco){window.open(`https://wa.me/${WA}?text=`+encodeURIComponent(`Olá, Lira Fraldas! 👋 Quero comprar: *${nome}* — ${preco}. Qual a disponibilidade e como pagar?`),"_blank");}
   function pedirGeral(){window.open(`https://wa.me/${WA}?text=`+encodeURIComponent("Olá, Lira Fraldas! Gostaria de tirar uma dúvida / fazer um pedido."),"_blank");}
@@ -926,12 +1007,23 @@
         ? `⚠️ *ATENÇÃO — o sistema ajustou este pedido:*\n${avisos.map(a=>"• "+a).join("\n")}\n\n`
         : "";
       // Só afirma "registrado" quando o ERP devolveu número de pedido de verdade.
-      const txt=(ok&&j&&j.numero)
-        ? bloco+`*PEDIDO #${j.numero}* (já registrado no sistema)\n\n`+msg
+      const registrado=ok&&j&&j.numero;
+      const txt=registrado
+        ? `Olá, Lira Fraldas! Meu pedido *#${j.numero}* já foi registrado no sistema. Esta é a referência para consulta no ERP.`
         : bloco+msg;
+      if(registrado){
+        if(aba)aba.close();
+        showReceipt({
+        numero:j.numero,
+        // Usa apenas o snapshot recalculado pelo ERP, nunca o carrinho do navegador.
+        items:(j.itens||[]).map(i=>({q:Number(i.quantidade),n:i.nome,p:fmt(Number(i.precoUnitario))})),
+        nome:j.cliente&&j.cliente.nome,
+        entrega:j.entrega&&j.entrega.tipo==="RETIRADA"?"Retirada na loja":(j.entrega&&[j.entrega.endereco,j.entrega.bairro].filter(Boolean).join(" — "))||"Entrega a combinar",
+        total:fmt(Number(j.total)),pagamento:pg?`Preferência: ${pg.t}`:"A combinar",avisos
+        },txt);
+      }
       if(avisos.length)toast("⚠️ O estoque mudou — veja o aviso na mensagem");
-      if(aba) aba.location.href=`https://wa.me/${WA}?text=`+encodeURIComponent(txt);
-      else abrirWhats(txt);
+      if(!registrado){if(aba)aba.location.href=`https://wa.me/${WA}?text=`+encodeURIComponent(txt);else abrirWhats(txt);}
     }).catch(()=>{
       clearTimeout(t);
       if(aba) aba.location.href=`https://wa.me/${WA}?text=`+encodeURIComponent(msg);
@@ -1016,7 +1108,7 @@
   showDept("__todos__");
 
   let toastT; window.toast=(m)=>{const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),1600);};
-  document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeProd();closeCart();}});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeReceipt();closeProd();closeCart();}});
   renderPagamentos();
   renderBairros();
   prefillDados();
