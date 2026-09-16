@@ -550,7 +550,7 @@
       </div>
       <div class="cart-retirada" id="cart-retirada" hidden>🏪 <b>Retirada grátis na loja</b><br>Rua Juvêncio Vasconcelos, 385 A — Fortaleza/CE<br>🕐 Seg–Sex 8h–18h · Sáb 8h–12h</div>
       <div class="cart-entrega" id="cart-entrega-box">
-        <label for="cart-cep">Entrega — qual seu bairro?</label>
+        <label for="cart-cep">Entrega — informe seu CEP ou bairro</label>
         <div class="cep-row">
           <input id="cart-cep" inputmode="numeric" maxlength="9" placeholder="CEP (opcional)" oninput="maskCep(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();consultarCep()}">
           <button type="button" onclick="consultarCep()">Buscar</button>
@@ -558,7 +558,7 @@
         <select id="cart-bairro" aria-label="Bairro de entrega" onchange="setBairro(this.value)"></select>
         <div class="end-row">
           <input id="cart-rua" class="rua" type="text" placeholder="Rua / Av." autocomplete="address-line1" oninput="setDado('rua',this.value)">
-          <input id="cart-num" class="num" type="text" placeholder="Nº" inputmode="numeric" autocomplete="address-line2" oninput="setDado('num',this.value)">
+          <input id="cart-num" class="num" type="text" placeholder="Número" inputmode="numeric" autocomplete="address-line2" aria-required="true" oninput="setDado('num',this.value)">
         </div>
       </div>
       <div class="cart-dados">
@@ -863,13 +863,21 @@
     const el=document.getElementById("cart-cep"); const cep=(el.value||"").replace(/\D/g,"");
     const fr=document.getElementById("cart-frete");
     if(cep.length!==8){fr.textContent="Digite um CEP válido (8 dígitos) ou escolha o bairro na lista.";fr.className="cart-frete warn";return;}
-    fr.textContent="Buscando seu bairro…";fr.className="cart-frete";
+    fr.textContent="Buscando endereço…";fr.className="cart-frete";
     try{
       const r=await fetch(`https://viacep.com.br/ws/${cep}/json/`); const j=await r.json();
       if(j.erro||(j.localidade||"").toUpperCase()!=="FORTALEZA"){fr.textContent="Não entregamos nesse endereço — retirada na loja ou combine pelo WhatsApp.";fr.className="cart-frete warn";return;}
+      // ViaCEP devolve o logradouro quando o CEP o identifica. Preenchemos o
+      // campo, mas ele continua editável: CEPs gerais podem não ter rua ou
+      // apontar para trecho/prédio diferente do endereço do cliente.
+      if((j.logradouro||"").trim()){
+        const rua=document.getElementById("cart-rua");
+        if(rua){rua.value=j.logradouro.trim();setDado("rua",rua.value);}
+      }
       const k=window.LIRA_FRETE_norm(j.bairro);
       if(window.LIRA_FRETE.bairros[k]){bairroEntrega=k;localStorage.setItem("lira-bairro",k);renderBairros();updateCart();}
       else{fr.textContent=`Bairro "${j.bairro}" fora da lista — escolha o mais próximo na lista ou combine pelo WhatsApp.`;fr.className="cart-frete warn";}
+      if((j.logradouro||"").trim())document.getElementById("cart-num")?.focus();
     }catch(e){fr.textContent="Não consegui consultar o CEP agora — escolha o bairro na lista.";fr.className="cart-frete warn";}
   };
   // Retorna {frete, txt, cls} conforme bairro escolhido + subtotal
@@ -940,6 +948,12 @@
     const items=Object.values(cart); if(!items.length)return;
     const sub=cartTotal();
     const retirada=modoEntrega==="retirada";
+    if(!retirada&&(!dados.rua||!dados.num)){
+      const falta=dados.rua?"o número":"a rua";
+      toast(`Informe ${falta} para a entrega.`);
+      document.getElementById(dados.rua?"cart-num":"cart-rua")?.focus();
+      return;
+    }
     const fi=retirada?{frete:0,txt:"",cls:""}:freteInfo(sub);
     const pg=PAGAMENTOS.find(p=>p.v===getFormaPagamento());
     const bLabel=bairroEntrega&&window.LIRA_FRETE.bairros[bairroEntrega]?window.LIRA_FRETE.bairros[bairroEntrega].label:"";
