@@ -1019,7 +1019,7 @@
         items:(j.itens||[]).map(i=>({q:Number(i.quantidade),n:i.nome,p:fmt(Number(i.precoUnitario))})),
         nome:j.cliente&&j.cliente.nome,
         entrega:j.entrega&&j.entrega.tipo==="RETIRADA"?"Retirada na loja":(j.entrega&&[j.entrega.endereco,j.entrega.bairro].filter(Boolean).join(" — "))||"Entrega a combinar",
-        total:fmt(Number(j.total)),pagamento:pg?`Preferência: ${pg.t}`:"A combinar",avisos
+        total:fmt(Number(j.total)),pagamento:pg?pg.t:"A combinar",avisos
         },txt);
       }
       if(avisos.length)toast("⚠️ O estoque mudou — veja o aviso na mensagem");
