@@ -563,8 +563,8 @@
       </div>
       <div class="cart-dados">
         <label for="cart-nome">Seus dados</label>
-        <input id="cart-nome" type="text" placeholder="Seu nome" autocomplete="name" oninput="setDado('nome',this.value)">
-        <input id="cart-fone" type="tel" inputmode="tel" placeholder="Seu WhatsApp (DDD + numero)" autocomplete="tel" style="width:100%;margin-top:7px" oninput="setDado('fone',this.value)">
+        <input id="cart-nome" type="text" placeholder="Seu nome" autocomplete="name" required aria-required="true" oninput="setDado('nome',this.value)">
+        <input id="cart-fone" type="tel" inputmode="tel" placeholder="Seu WhatsApp (DDD + numero)" autocomplete="tel" required aria-required="true" style="width:100%;margin-top:7px" oninput="setDado('fone',this.value)">
       </div>
       <div class="cart-pay">
         <span>Forma de pagamento</span>
@@ -961,6 +961,18 @@
     const items=Object.values(cart); if(!items.length)return;
     const sub=cartTotal();
     const retirada=modoEntrega==="retirada";
+    const nome=(dados.nome||"").trim();
+    const fone=(dados.fone||"").replace(/\D/g,"");
+    if(nome.length<2){
+      toast("Informe seu nome para registrar o pedido.");
+      document.getElementById("cart-nome")?.focus();
+      return;
+    }
+    if(fone.length<10){
+      toast("Informe seu WhatsApp com DDD para registrar o pedido.");
+      document.getElementById("cart-fone")?.focus();
+      return;
+    }
     if(!retirada&&(!dados.rua||!dados.num)){
       const falta=dados.rua?"o número":"a rua";
       toast(`Informe ${falta} para a entrega.`);
@@ -998,13 +1010,14 @@
     // NUMERO na mensagem — e por ele que a vendedora acha o pedido na inbox do
     // PDV e fecha sem redigitar nada.
     //
-    // BEST-EFFORT DE PROPOSITO: se a API estiver fora, o CORS barrar, faltar
-    // telefone ou o produto nao tiver id, o WhatsApp abre exatamente como hoje.
+    // BEST-EFFORT DE PROPOSITO: se a API estiver fora, o CORS barrar ou o
+    // produto nao tiver id, o WhatsApp abre exatamente como hoje. Nome e
+    // telefone, por outro lado, são obrigatórios antes deste ponto: sem eles
+    // não há como criar nem vincular o cliente no ERP.
     // A integracao NUNCA pode impedir o cliente de mandar o pedido.
     const abrirWhats=(txt)=>window.open(`https://wa.me/${WA}?text=`+encodeURIComponent(txt),"_blank");
-    const fone=(dados.fone||"").replace(/\D/g,"");
     const itensApi=items.filter(i=>i.i).map(i=>({produtoId:i.i,quantidade:i.q}));
-    if(!API_BASE||!SITE_KEY||fone.length<10||itensApi.length!==items.length){ abrirWhats(msg); return; }
+    if(!API_BASE||!SITE_KEY||itensApi.length!==items.length){ abrirWhats(msg); return; }
 
     // Abre a aba ANTES do await: browser bloqueia popup aberto depois de
     // promessa resolvida (o clique ja "esfriou"). Depois so ajusta a URL.
@@ -1020,7 +1033,7 @@
       headers:{"Content-Type":"application/json","x-site-api-key":SITE_KEY},
       body:JSON.stringify({
         itens:itensApi,
-        cliente:{nome:dados.nome||"Cliente do site",telefone:fone},
+        cliente:{nome,telefone:fone},
         entrega,
         formaPagamentoPreferida:pg?.t||undefined,
         idempotencyKey:`site-${Date.now()}-${Math.random().toString(36).slice(2,10)}`
