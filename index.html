@@ -550,14 +550,13 @@
       </div>
       <div class="cart-retirada" id="cart-retirada" hidden>🏪 <b>Retirada grátis na loja</b><br>Rua Juvêncio Vasconcelos, 385 A — Fortaleza/CE<br>🕐 Seg–Sex 8h–18h · Sáb 8h–12h</div>
       <div class="cart-entrega" id="cart-entrega-box">
-        <label for="cart-cep">Entrega — informe seu CEP ou bairro</label>
+        <label for="cart-cep">Entrega — informe seu CEP</label>
         <div class="cep-row">
-          <input id="cart-cep" inputmode="numeric" maxlength="9" placeholder="CEP (opcional)" oninput="maskCep(this);setDado('cep',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();consultarCep()}">
+          <input id="cart-cep" inputmode="numeric" maxlength="9" placeholder="CEP *" oninput="maskCep(this);setCep(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();consultarCep()}">
           <button type="button" onclick="consultarCep()">Buscar</button>
         </div>
-        <select id="cart-bairro" aria-label="Bairro de entrega" onchange="setBairro(this.value)"></select>
         <div class="end-row">
-          <input id="cart-rua" class="rua" type="text" placeholder="Rua / Av." autocomplete="address-line1" oninput="setDado('rua',this.value)">
+          <input id="cart-rua" class="rua" type="text" placeholder="Rua preenchida pelo CEP" autocomplete="address-line1" readonly aria-readonly="true">
           <input id="cart-num" class="num" type="text" placeholder="Número" inputmode="numeric" autocomplete="address-line2" aria-required="true" oninput="setDado('num',this.value)">
         </div>
       </div>
@@ -849,6 +848,8 @@
   // ===== Dados do cliente (nome + endereço) — persistidos e enviados no pedido =====
   const dados={nome:localStorage.getItem("lira-nome")||"",fone:localStorage.getItem("lira-fone")||"",cep:localStorage.getItem("lira-cep")||"",rua:localStorage.getItem("lira-rua")||"",num:localStorage.getItem("lira-num")||""};
   window.setDado=(k,v)=>{dados[k]=(v||"").trim();localStorage.setItem("lira-"+k,dados[k]);};
+  // Trocar o CEP invalida a rua antiga: ela só pode vir da consulta atual.
+  window.setCep=(valor)=>{const cep=(valor||"").replace(/\D/g,"");if(cep!==dados.cep.replace(/\D/g,"")){setDado("rua","");const rua=document.getElementById("cart-rua");if(rua)rua.value="";}setDado("cep",valor);};
   function prefillDados(){const map={nome:"cart-nome",fone:"cart-fone",cep:"cart-cep",rua:"cart-rua",num:"cart-num"};for(const k in map){const el=document.getElementById(map[k]);if(el&&dados[k])el.value=dados[k];}}
   // ===== Entrega x Retirada na loja =====
   let modoEntrega=localStorage.getItem("lira-modo")||"entrega";
@@ -866,24 +867,20 @@
   window.consultarCep=async()=>{
     const el=document.getElementById("cart-cep"); const cep=(el.value||"").replace(/\D/g,"");
     const fr=document.getElementById("cart-frete");
-    if(cep.length!==8){fr.textContent="Digite um CEP válido (8 dígitos) ou escolha o bairro na lista.";fr.className="cart-frete warn";return;}
+    if(cep.length!==8){fr.textContent="Digite um CEP válido (8 dígitos).";fr.className="cart-frete warn";return;}
     fr.textContent="Buscando endereço…";fr.className="cart-frete";
     try{
       const r=await fetch(`https://viacep.com.br/ws/${cep}/json/`); const j=await r.json();
       if(j.erro||(j.localidade||"").toUpperCase()!=="FORTALEZA"){fr.textContent="Não entregamos nesse endereço — retirada na loja ou combine pelo WhatsApp.";fr.className="cart-frete warn";return;}
-      // ViaCEP devolve o logradouro quando o CEP o identifica. Preenchemos o
-      // campo, mas ele continua editável: CEPs gerais podem não ter rua ou
-      // apontar para trecho/prédio diferente do endereço do cliente.
-      if((j.logradouro||"").trim()){
-        const rua=document.getElementById("cart-rua");
-        if(rua){rua.value=j.logradouro.trim();setDado("rua",rua.value);}
-      }
+      if(!(j.logradouro||"").trim()){fr.textContent="Este CEP não identifica a rua. Informe outro CEP para entrega.";fr.className="cart-frete warn";return;}
+      const rua=document.getElementById("cart-rua");
+      if(rua){rua.value=j.logradouro.trim();setDado("rua",rua.value);}
       setDado("cep",el.value);
       const k=window.LIRA_FRETE_norm(j.bairro);
-      if(window.LIRA_FRETE.bairros[k]){bairroEntrega=k;localStorage.setItem("lira-bairro",k);renderBairros();updateCart();}
-      else{fr.textContent=`Bairro "${j.bairro}" fora da lista — escolha o mais próximo na lista ou combine pelo WhatsApp.`;fr.className="cart-frete warn";}
-      if((j.logradouro||"").trim())document.getElementById("cart-num")?.focus();
-    }catch(e){fr.textContent="Não consegui consultar o CEP agora — escolha o bairro na lista.";fr.className="cart-frete warn";}
+      if(window.LIRA_FRETE.bairros[k]){bairroEntrega=k;localStorage.setItem("lira-bairro",k);updateCart();}
+      else{bairroEntrega="";localStorage.removeItem("lira-bairro");fr.textContent=`Bairro "${j.bairro}" fora da área de entrega — combine pelo WhatsApp.`;fr.className="cart-frete warn";}
+      document.getElementById("cart-num")?.focus();
+    }catch(e){fr.textContent="Não consegui consultar o CEP agora. Tente novamente.";fr.className="cart-frete warn";}
   };
   // Retorna {frete, txt, cls} conforme bairro escolhido + subtotal
   function freteInfo(sub){
@@ -973,10 +970,10 @@
       document.getElementById("cart-fone")?.focus();
       return;
     }
-    if(!retirada&&(!dados.rua||!dados.num)){
-      const falta=dados.rua?"o número":"a rua";
+    if(!retirada&&((dados.cep||"").replace(/\D/g,"").length!==8||!dados.rua||!dados.num)){
+      const falta=dados.rua?"o número":((dados.cep||"").replace(/\D/g,"").length===8?"um CEP que identifique a rua":"o CEP");
       toast(`Informe ${falta} para a entrega.`);
-      document.getElementById(dados.rua?"cart-num":"cart-rua")?.focus();
+      document.getElementById(dados.rua?"cart-num":"cart-cep")?.focus();
       return;
     }
     const fi=retirada?{frete:0,txt:"",cls:""}:freteInfo(sub);
@@ -1025,6 +1022,7 @@
     const entrega=retirada
       ? {tipo:"RETIRADA"}
       : {tipo:"ENTREGA",cep:dados.cep||undefined,bairro:bLabel||undefined,
+         numero:dados.num||undefined,
          endereco:[dados.rua&&`${dados.rua}${dados.num?`, ${dados.num}`:""}`].filter(Boolean).join("")||undefined,
          cidade:"Fortaleza",uf:"CE"};
     const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),8000);
