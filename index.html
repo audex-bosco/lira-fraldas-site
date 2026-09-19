@@ -320,6 +320,7 @@
   .cart-sub b{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
   .cart-frete{font-size:12.5px;color:var(--muted);margin-bottom:13px;line-height:1.4}
   .cart-frete.free{color:var(--mint-deep);font-weight:700}
+  .cart-frete.rate{color:var(--navy);font-weight:800}
   .cart-frete.warn{color:#b45309;font-weight:600}
   .cart-modo{display:flex;gap:7px;margin:2px 0 12px}
   .modo{flex:1;border:1.5px solid var(--line);background:#fff;color:var(--navy);border-radius:9px;padding:9px 8px;font-size:12.5px;font-weight:700;cursor:pointer;transition:.15s}
@@ -897,7 +898,7 @@
     if(c.frete===0&&c.gratisAcima!=null)return{frete:0,txt:`🎉 Frete grátis para ${c.label} (pedido a partir de ${fmt(c.gratisAcima)})`,cls:"free"};
     let t=`Frete para ${c.label}: ${fmt(c.frete)}`;
     if(c.gratisAcima!=null)t+=` · grátis a partir de ${fmt(c.gratisAcima)} (faltam ${fmt(c.gratisAcima-sub)})`;
-    return{frete:c.frete,txt:t,cls:""};
+    return{frete:c.frete,txt:t,cls:"rate"};
   }
 
   function updateCart(){
@@ -1016,7 +1017,7 @@
     }else{
       const endr=[dados.rua&&`${dados.rua}${dados.num?`, ${dados.num}`:""}`,bLabel].filter(Boolean).join(" — ");
       msg+=endr?`\n📍 *Endereço:* ${endr}`:"";
-      msg+=temFrete?(fi.frete===0?"\nFrete: grátis 🎉":`\nFrete: ${fmt(fi.frete)}`):"\nEntrega: combinar o frete pelo meu bairro";
+      msg+=temFrete?(fi.frete===0?"\n*Frete: grátis* 🎉":`\n*Frete para ${bLabel}: ${fmt(fi.frete)}*`):"\nEntrega: combinar o frete pelo meu bairro";
     }
     msg+=`\n*Total${AVISTA_ON?" à vista (Pix ou dinheiro)":""}: ${fmt(sub+freteVal)}*`;
     msg+=simulacaoCredito;
