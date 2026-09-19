@@ -331,7 +331,9 @@
   .cep-row{display:flex;gap:6px;margin-bottom:7px}
   .cep-row input{flex:1;min-width:0;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px}
   .cep-row button{background:var(--mint-deep,#1A7A66);color:#fff;border:0;border-radius:9px;padding:0 13px;font-size:13px;font-weight:700;cursor:pointer}
-  #cart-bairro{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--navy)}
+  .bairro-row{margin:0 0 7px}
+  .bairro-row label{display:block;font-size:12px;font-weight:700;color:var(--navy);margin-bottom:5px}
+  #cart-bairro{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#f8fafc;color:var(--navy)}
   .cart-dados{margin:2px 0 11px}
   .cart-dados > label{display:block;font-size:12px;font-weight:700;color:var(--navy);margin-bottom:7px}
   .cart-dados input,.end-row input{padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--navy)}
@@ -555,10 +557,15 @@
           <input id="cart-cep" inputmode="numeric" maxlength="9" placeholder="CEP *" oninput="maskCep(this);setCep(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();consultarCep()}">
           <button type="button" onclick="consultarCep()">Buscar</button>
         </div>
+        <div class="bairro-row">
+          <label for="cart-bairro">Bairro</label>
+          <input id="cart-bairro" type="text" placeholder="Preenchido pelo CEP" readonly aria-readonly="true">
+        </div>
         <div class="end-row">
           <input id="cart-rua" class="rua" type="text" placeholder="Rua preenchida pelo CEP" autocomplete="address-line1" readonly aria-readonly="true">
           <input id="cart-num" class="num" type="text" placeholder="Número" inputmode="numeric" autocomplete="address-line2" aria-required="true" oninput="setDado('num',this.value)">
         </div>
+        <div class="cart-frete" id="cart-frete" aria-live="polite"></div>
       </div>
       <div class="cart-dados">
         <label for="cart-nome">Seus dados</label>
@@ -571,7 +578,6 @@
       </div>
     </div>
     <div class="cart-f">
-      <div class="cart-frete" id="cart-frete"></div>
       <div class="cart-sub cart-total-final"><span>Total no cartão</span><b id="cart-total-final">R$ 0,00</b></div>
       <div class="cart-avista"><span id="cart-cartao-label">💳 No cartão (até 2x)</span><b id="cart-avista">R$ 0,00</b></div>
       <div class="cart-btns">
@@ -839,17 +845,18 @@
 
   // ===== Frete por bairro (fonte: fretes.js gerado do ERP) =====
   let bairroEntrega=localStorage.getItem("lira-bairro")||"";
-  function renderBairros(){
-    const sel=document.getElementById("cart-bairro"); if(!sel||!window.LIRA_FRETE)return;
-    const opts=Object.entries(window.LIRA_FRETE.bairros).map(([k,v])=>({k,label:v.label})).sort((a,b)=>a.label.localeCompare(b.label,"pt"));
-    sel.innerHTML='<option value="">Selecione seu bairro…</option>'+opts.map(o=>`<option value="${o.k}"${o.k===bairroEntrega?' selected':''}>${o.label}</option>`).join("");
+  let bairroExibido=bairroEntrega&&window.LIRA_FRETE?.bairros[bairroEntrega]?.label||"";
+  function renderBairro(){
+    const input=document.getElementById("cart-bairro"); if(input)input.value=bairroExibido;
   }
-  window.setBairro=(k)=>{bairroEntrega=k||"";localStorage.setItem("lira-bairro",bairroEntrega);updateCart();};
+  function limparBairro(){
+    bairroEntrega="";bairroExibido="";localStorage.removeItem("lira-bairro");renderBairro();
+  }
   // ===== Dados do cliente (nome + endereço) — persistidos e enviados no pedido =====
   const dados={nome:localStorage.getItem("lira-nome")||"",fone:localStorage.getItem("lira-fone")||"",cep:localStorage.getItem("lira-cep")||"",rua:localStorage.getItem("lira-rua")||"",num:localStorage.getItem("lira-num")||""};
   window.setDado=(k,v)=>{dados[k]=(v||"").trim();localStorage.setItem("lira-"+k,dados[k]);};
   // Trocar o CEP invalida a rua antiga: ela só pode vir da consulta atual.
-  window.setCep=(valor)=>{const cep=(valor||"").replace(/\D/g,"");if(cep!==dados.cep.replace(/\D/g,"")){setDado("rua","");const rua=document.getElementById("cart-rua");if(rua)rua.value="";}setDado("cep",valor);};
+  window.setCep=(valor)=>{const cep=(valor||"").replace(/\D/g,"");if(cep!==dados.cep.replace(/\D/g,"")){setDado("rua","");const rua=document.getElementById("cart-rua");if(rua)rua.value="";limparBairro();}setDado("cep",valor);updateCart();};
   function prefillDados(){const map={nome:"cart-nome",fone:"cart-fone",cep:"cart-cep",rua:"cart-rua",num:"cart-num"};for(const k in map){const el=document.getElementById(map[k]);if(el&&dados[k])el.value=dados[k];}}
   // ===== Entrega x Retirada na loja =====
   let modoEntrega=localStorage.getItem("lira-modo")||"entrega";
@@ -871,16 +878,16 @@
     fr.textContent="Buscando endereço…";fr.className="cart-frete";
     try{
       const r=await fetch(`https://viacep.com.br/ws/${cep}/json/`); const j=await r.json();
-      if(j.erro||(j.localidade||"").toUpperCase()!=="FORTALEZA"){fr.textContent="Não entregamos nesse endereço — retirada na loja ou combine pelo WhatsApp.";fr.className="cart-frete warn";return;}
-      if(!(j.logradouro||"").trim()){fr.textContent="Este CEP não identifica a rua. Informe outro CEP para entrega.";fr.className="cart-frete warn";return;}
+      if(j.erro||(j.localidade||"").toUpperCase()!=="FORTALEZA"){limparBairro();fr.textContent="Não entregamos nesse endereço — retirada na loja ou combine pelo WhatsApp.";fr.className="cart-frete warn";return;}
+      if(!(j.logradouro||"").trim()){limparBairro();fr.textContent="Este CEP não identifica a rua. Informe outro CEP para entrega.";fr.className="cart-frete warn";return;}
       const rua=document.getElementById("cart-rua");
       if(rua){rua.value=j.logradouro.trim();setDado("rua",rua.value);}
       setDado("cep",el.value);
       const k=window.LIRA_FRETE_norm(j.bairro);
-      if(window.LIRA_FRETE.bairros[k]){bairroEntrega=k;localStorage.setItem("lira-bairro",k);updateCart();}
-      else{bairroEntrega="";localStorage.removeItem("lira-bairro");fr.textContent=`Bairro "${j.bairro}" fora da área de entrega — combine pelo WhatsApp.`;fr.className="cart-frete warn";}
+      if(window.LIRA_FRETE.bairros[k]){bairroEntrega=k;bairroExibido=window.LIRA_FRETE.bairros[k].label;localStorage.setItem("lira-bairro",k);renderBairro();updateCart();}
+      else{limparBairro();bairroExibido=(j.bairro||"").trim();renderBairro();fr.textContent=`Bairro "${j.bairro}" fora da área de entrega — combine pelo WhatsApp.`;fr.className="cart-frete warn";}
       document.getElementById("cart-num")?.focus();
-    }catch(e){fr.textContent="Não consegui consultar o CEP agora. Tente novamente.";fr.className="cart-frete warn";}
+    }catch(e){limparBairro();fr.textContent="Não consegui consultar o CEP agora. Tente novamente.";fr.className="cart-frete warn";}
   };
   // Retorna {frete, txt, cls} conforme bairro escolhido + subtotal
   function freteInfo(sub){
@@ -1166,7 +1173,7 @@
   let toastT; window.toast=(m)=>{const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),1600);};
   document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeReceipt();closeProd();closeCart();}});
   renderPagamentos();
-  renderBairros();
+  renderBairro();
   prefillDados();
   renderModo();
   renderFavBadge();
