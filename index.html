@@ -979,8 +979,21 @@
     const fi=retirada?{frete:0,txt:"",cls:""}:freteInfo(sub);
     const pg=PAGAMENTOS.find(p=>p.v===getFormaPagamento());
     const bLabel=bairroEntrega&&window.LIRA_FRETE.bairros[bairroEntrega]?window.LIRA_FRETE.bairros[bairroEntrega].label:"";
-    const temFrete=!retirada&&bLabel&&(fi.frete>0||fi.cls==="free");
-    const freteVal=temFrete?(fi.frete||0):0;
+    // Entrega só pode seguir com um bairro da tabela. Antes deste gate, um CEP
+    // válido sem consulta (ou fora da lista) chegava ao ERP sem bairro e o
+    // pedido era registrado com frete zero.
+    const freteCalculado=!retirada&&bLabel
+      ? window.LIRA_FRETE_calc(bairroEntrega,sub)
+      : null;
+    if(!retirada&&(!freteCalculado||!freteCalculado.encontrado)){
+      toast("Consulte o CEP ou selecione seu bairro para calcular o frete.");
+      document.getElementById("cart-cep")?.focus();
+      return;
+    }
+    // Zero é válido somente quando a própria regra do bairro concede frete
+    // grátis; o ERP recalcula o mesmo valor antes de registrar a pré-venda.
+    const temFrete=!retirada;
+    const freteVal=temFrete?freteCalculado.frete:0;
     const totalCartao=cartTotalCartao()+freteVal;
     const acrescimoCartao=totalCartao-(sub+freteVal);
     const simulacaoCredito=AVISTA_ON&&pagamentoNoCredito()
