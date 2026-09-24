@@ -878,9 +878,21 @@
     if(cep.length!==8){fr.textContent="Digite um CEP válido (8 dígitos).";fr.className="cart-frete warn";return;}
     fr.textContent="Buscando endereço…";fr.className="cart-frete";
     try{
-      const r=await fetch(`https://viacep.com.br/ws/${cep}/json/`); const j=await r.json();
-      if(j.erro||(j.localidade||"").toUpperCase()!=="FORTALEZA"){limparBairro();fr.textContent="Não entregamos nesse endereço — retirada na loja ou combine pelo WhatsApp.";fr.className="cart-frete warn";return;}
-      if(!(j.logradouro||"").trim()){limparBairro();fr.textContent="Este CEP não identifica a rua. Informe outro CEP para entrega.";fr.className="cart-frete warn";return;}
+      let j=null;
+      try{
+        const r=await fetch(`https://viacep.com.br/ws/${cep}/json/`); const rj=await r.json();
+        if(!rj.erro&&(rj.localidade||"").toUpperCase()==="FORTALEZA"&&(rj.logradouro||"").trim())j=rj;
+      }catch(e){/* segue para fallback */}
+      if(!j){
+        try{
+          const r2=await fetch(`https://brasilapi.com.br/api/cep/v2/${cep}`);
+          if(r2.ok){
+            const bj=await r2.json();
+            if((bj.city||"").toUpperCase()==="FORTALEZA"&&(bj.street||"").trim())j={logradouro:bj.street,bairro:bj.neighborhood,localidade:bj.city};
+          }
+        }catch(e){/* nenhuma fonte respondeu */}
+      }
+      if(!j){limparBairro();fr.textContent="Não entregamos nesse endereço — retirada na loja ou combine pelo WhatsApp.";fr.className="cart-frete warn";return;}
       const rua=document.getElementById("cart-rua");
       if(rua){rua.value=j.logradouro.trim();setDado("rua",rua.value);}
       setDado("cep",el.value);
