@@ -116,6 +116,14 @@
   .menu a{display:block;padding:12px 15px;font-weight:600;font-size:13.5px;color:var(--navy-deep);white-space:nowrap;cursor:pointer}
   .menu a:hover,.menu a.on{background:rgba(255,255,255,.6)}
 
+  .promo-banner{margin:20px 0 0;border-radius:18px;overflow:hidden;background:var(--mint-soft)}
+  .promo-banner[hidden]{display:none}
+  .promo-banner a,.promo-banner img{display:block;width:100%}
+  .promo-banner img{height:auto;object-fit:contain}
+  .checkout-status{font-size:13px;line-height:1.5;margin-top:10px;color:var(--navy)}
+  .checkout-status[hidden],.checkout-new[hidden]{display:none}
+  .checkout-status a{display:block;margin-top:6px;color:var(--mint-deep);font-weight:700}
+  .checkout-new{margin-top:10px;width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;background:#fff;color:var(--navy);font-weight:700;cursor:pointer}
   .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;margin:24px 0;align-items:stretch}
   .hcard{border-radius:22px;padding:38px;color:#fff;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;min-height:250px;text-shadow:0 1px 8px rgba(20,28,45,.55);background:linear-gradient(100deg,rgba(38,50,74,.82) 0%,rgba(38,50,74,.5) 44%,rgba(38,50,74,.08) 74%),url('banner-hero.jpg') center/cover no-repeat}
   .hcard .kk{font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;opacity:.92;margin-bottom:12px}
@@ -369,8 +377,8 @@
   .receipt h2{margin:0 34px 4px 0;color:var(--navy);font-size:21px}.receipt p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.4}
   .receipt-close{position:absolute;right:18px;top:16px;border:0;background:transparent;color:var(--navy);font-size:25px;line-height:1;cursor:pointer}
   .receipt-preview{display:block;width:100%;border:1px solid var(--line);border-radius:10px;background:#fff;margin:12px 0}
-  .receipt-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.receipt-actions button{border:0;border-radius:11px;padding:12px 10px;font:700 13px var(--font);cursor:pointer}.receipt-share{background:var(--wa);color:#fff}.receipt-save{background:var(--mint-soft);color:var(--mint-deep)}
-  .receipt-wa{grid-column:1/-1;background:var(--navy);color:#fff}
+  .receipt-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.receipt-actions button,.receipt-actions a{border:0;border-radius:11px;padding:12px 10px;font:700 13px var(--font);cursor:pointer}.receipt-share{background:var(--wa);color:#fff}.receipt-save{background:var(--mint-soft);color:var(--mint-deep)}
+  .receipt-wa{text-align:center;text-decoration:none;grid-column:1/-1;background:var(--navy);color:#fff}
   .receipt-note{margin-top:12px!important;font-size:12px!important}
 
   /* ===== Forma de pagamento (carrinho + rodapé) ===== */
@@ -453,6 +461,7 @@
 </header>
 
 <div class="wrap">
+  <section class="promo-banner" id="promo-banner" aria-label="Promoção em destaque" hidden></section>
   <div class="hero">
     <div class="hcard">
       <div class="kk">Bem-vinda à Lira</div>
@@ -585,6 +594,8 @@
         <button type="button" class="cart-back" onclick="goStep(1,true)">← Voltar</button>
         <button class="cart-cta" id="cart-cta" onclick="finalizarPedido()">💬 Finalizar pedido no WhatsApp</button>
       </div>
+      <div class="checkout-status" id="checkout-status" role="status" aria-live="polite" hidden></div>
+      <button class="checkout-new" id="checkout-new" type="button" onclick="novaCompra()" hidden>Iniciar nova compra</button>
     </div>
   </div>
 </aside>
@@ -606,7 +617,7 @@
     <div class="receipt-actions">
       <button class="receipt-share" type="button" onclick="shareReceipt()">↗ Compartilhar cupom</button>
       <button class="receipt-save" type="button" onclick="downloadReceipt()">↓ Salvar imagem</button>
-      <button class="receipt-wa" type="button" onclick="openReceiptWhats()">💬 Abrir WhatsApp com a referência</button>
+      <a class="receipt-wa" id="receipt-wa" target="_blank" rel="noopener noreferrer">💬 Abrir WhatsApp com a referência</a>
     </div>
     <p class="receipt-note">Este é um resumo do pedido. A disponibilidade e a confirmação final são feitas pela Lira no ERP.</p>
   </section>
@@ -951,6 +962,7 @@
         : `💳 No cartão (até ${MAX_PARCELAS}x)`;
     }
     document.getElementById("cart-cta").disabled=!items.length;
+    window.renderCheckoutState?.();
     const nx=document.getElementById("cart-next"); if(nx)nx.disabled=!items.length;
     // esvaziou o carrinho estando no passo 2? volta pro passo 1
     if(!items.length&&document.getElementById("cart-p")?.dataset.step==="2")goStep(1,false);
@@ -975,6 +987,7 @@
   // usar getFormaPagamento() aqui para acionar o pinpad/checkout de cartão em vez de só WhatsApp.
 
   window.finalizarPedido=()=>{
+    if(window.checkoutExiste?.())return window.retomarPedido();
     const items=Object.values(cart); if(!items.length)return;
     const sub=cartTotal();
     const retirada=modoEntrega==="retirada";
@@ -996,7 +1009,6 @@
       document.getElementById(dados.rua?"cart-num":"cart-cep")?.focus();
       return;
     }
-    const fi=retirada?{frete:0,txt:"",cls:""}:freteInfo(sub);
     const pg=PAGAMENTOS.find(p=>p.v===getFormaPagamento());
     const bLabel=bairroEntrega&&window.LIRA_FRETE.bairros[bairroEntrega]?window.LIRA_FRETE.bairros[bairroEntrega].label:"";
     // Entrega só pode seguir com um bairro da tabela. Antes deste gate, um CEP
@@ -1010,102 +1022,19 @@
       document.getElementById("cart-cep")?.focus();
       return;
     }
-    // Zero é válido somente quando a própria regra do bairro concede frete
-    // grátis; o ERP recalcula o mesmo valor antes de registrar a pré-venda.
-    const temFrete=!retirada;
-    const freteVal=temFrete?freteCalculado.frete:0;
-    const totalCartao=cartTotalCartao()+freteVal;
-    const acrescimoCartao=totalCartao-(sub+freteVal);
-    const simulacaoCredito=AVISTA_ON&&pagamentoNoCredito()
-      ? `\n*Simulação no crédito:* ${fmt(totalCartao)} (acréscimo de ${fmt(acrescimoCartao)}) em até ${MAX_PARCELAS}x de ${fmt(parcelaDe(totalCartao))}`
-      : "";
-    let msg="Olá, Lira Fraldas! 👋 Quero fazer um pedido:\n";
-    if(dados.nome)msg+=`👤 *Cliente:* ${dados.nome}\n`;
-    msg+="\n";
-    msg+=items.map(i=>`• ${i.q}x ${i.n} — ${i.p}`).join("\n");
-    msg+=`\n\n*Subtotal${AVISTA_ON?" (à vista)":""}: ${fmt(sub)}*`;
-    if(retirada){
-      msg+="\n🏪 *Retirada na loja* — Rua Juvêncio Vasconcelos, 385 A, Fortaleza/CE";
-    }else{
-      const endr=[dados.rua&&`${dados.rua}${dados.num?`, ${dados.num}`:""}`,bLabel].filter(Boolean).join(" — ");
-      msg+=endr?`\n📍 *Endereço:* ${endr}`:"";
-      msg+=temFrete?(fi.frete===0?"\n*Frete: grátis* 🎉":`\n*Frete para ${bLabel}: ${fmt(fi.frete)}*`):"\nEntrega: combinar o frete pelo meu bairro";
-    }
-    msg+=`\n*Total${AVISTA_ON?" à vista (Pix ou dinheiro)":""}: ${fmt(sub+freteVal)}*`;
-    msg+=simulacaoCredito;
-    msg+="\nForma de pagamento: "+(pg?pg.t:"(a combinar)");
-
-    // ── Pre-pedido no ERP (best-effort) ─────────────────────────────────────
-    // Registra o pedido como PRE-VENDA (status PENDENTE, canal SITE) e poe o
-    // NUMERO na mensagem — e por ele que a vendedora acha o pedido na inbox do
-    // PDV e fecha sem redigitar nada.
-    //
-    // BEST-EFFORT DE PROPOSITO: se a API estiver fora, o CORS barrar ou o
-    // produto nao tiver id, o WhatsApp abre exatamente como hoje. Nome e
-    // telefone, por outro lado, são obrigatórios antes deste ponto: sem eles
-    // não há como criar nem vincular o cliente no ERP.
-    // A integracao NUNCA pode impedir o cliente de mandar o pedido.
-    const abrirWhats=(txt)=>window.open(`https://wa.me/${WA}?text=`+encodeURIComponent(txt),"_blank");
     const itensApi=items.filter(i=>i.i).map(i=>({produtoId:i.i,quantidade:i.q}));
-    if(!API_BASE||!SITE_KEY||itensApi.length!==items.length){ abrirWhats(msg); return; }
-
-    // Abre a aba ANTES do await: browser bloqueia popup aberto depois de
-    // promessa resolvida (o clique ja "esfriou"). Depois so ajusta a URL.
-    const aba=window.open("","_blank");
+    if(!API_BASE||!SITE_KEY||itensApi.length!==items.length){
+      toast("Não foi possível identificar todos os produtos. Atualize a página antes de enviar.");
+      return;
+    }
     const entrega=retirada
       ? {tipo:"RETIRADA"}
-      : {tipo:"ENTREGA",cep:dados.cep||undefined,bairro:bLabel||undefined,
-         numero:dados.num||undefined,
-         endereco:[dados.rua&&`${dados.rua}${dados.num?`, ${dados.num}`:""}`].filter(Boolean).join("")||undefined,
-         cidade:"Fortaleza",uf:"CE"};
-    const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),8000);
-    fetch(`${API_BASE}/api/public/pedidos`,{
-      method:"POST",signal:ctrl.signal,
-      headers:{"Content-Type":"application/json","x-site-api-key":SITE_KEY},
-      body:JSON.stringify({
-        itens:itensApi,
-        cliente:{nome,telefone:fone},
-        entrega,
-        formaPagamentoPreferida:pg?.t||undefined,
-        idempotencyKey:`site-${Date.now()}-${Math.random().toString(36).slice(2,10)}`
-      })
-    }).then(r=>r.json().then(j=>({ok:r.ok,j})).catch(()=>({ok:r.ok,j:null}))).then(({ok,j})=>{
-      clearTimeout(t);
-      // O ERP confere o estoque na hora do pedido (vendas/permitirPedidoSemEstoque
-      // = false) e devolve `avisos[]` com o que removeu ou ajustou — tanto no 201
-      // quanto no 422, que é a resposta quando NENHUM item sobrou.
-      // Até 03/08/26 o site lia só `j.numero` e, no 422, `r.ok` era false e o corpo
-      // virava null: o cliente recebia o carrinho inteiro no WhatsApp como se o
-      // pedido tivesse ido — inclusive itens que o servidor tinha acabado de
-      // recusar por falta de estoque. É o pior caso, porque ele acha que comprou.
-      const avisos=(j&&Array.isArray(j.avisos)?j.avisos:[]).slice(0,8);
-      const bloco=avisos.length
-        ? `⚠️ *ATENÇÃO — o sistema ajustou este pedido:*\n${avisos.map(a=>"• "+a).join("\n")}\n\n`
-        : "";
-      // Só afirma "registrado" quando o ERP devolveu número de pedido de verdade.
-      const registrado=ok&&j&&j.numero;
-      const txt=registrado
-        ? `Olá, Lira Fraldas! Meu pedido *#${j.numero}* já foi registrado no sistema.\n*Total solicitado:* ${fmt(Number(j.total))}${simulacaoCredito}\n*Forma de pagamento selecionada:* ${pg?pg.t:"A combinar"}\n\nEsta é a referência para consulta no ERP. A confirmação do pagamento é feita pela loja.`
-        : bloco+msg;
-      if(registrado){
-        if(aba)aba.close();
-        showReceipt({
-        numero:j.numero,
-        // Usa apenas o snapshot recalculado pelo ERP, nunca o carrinho do navegador.
-        items:(j.itens||[]).map(i=>({q:Number(i.quantidade),n:i.nome,p:fmt(Number(i.precoUnitario))})),
-        nome:j.cliente&&j.cliente.nome,
-        entrega:j.entrega&&j.entrega.tipo==="RETIRADA"?"Retirada na loja":(j.entrega&&[j.entrega.endereco,j.entrega.bairro].filter(Boolean).join(" — "))||"Entrega a combinar",
-        total:fmt(Number(j.total)),pagamento:pg?pg.t:"A combinar",simulacao:simulacaoCredito.replace(/^\n\*Simulação no crédito:\*\s*/,""),avisos
-        },txt);
-      }
-      if(avisos.length)toast("⚠️ O estoque mudou — veja o aviso na mensagem");
-      if(!registrado){if(aba)aba.location.href=`https://wa.me/${WA}?text=`+encodeURIComponent(txt);else abrirWhats(txt);}
-    }).catch(()=>{
-      clearTimeout(t);
-      if(aba) aba.location.href=`https://wa.me/${WA}?text=`+encodeURIComponent(msg);
-      else abrirWhats(msg);
-    });
+      : {tipo:"ENTREGA",cep:dados.cep,bairro:bLabel,numero:dados.num,
+         endereco:`${dados.rua}, ${dados.num}`,cidade:"Fortaleza",uf:"CE"};
+    window.iniciarPedido({itens:itensApi,cliente:{nome,telefone:fone},entrega,
+      formaPagamentoPreferida:pg?.t});
   };
+
   const PER=24; let base=[], view=[], shown=0, curDept=cats[0].nome, sz="", pmin=0, pmax=1e9;
   const SIZES=["RN","P","M","G","XG","XXG","XXXG","Piscina","Geriátrica"];
   // Fallback de tamanho: se o ERP não tagueou (p.t vazio), deduz do nome do produto.
@@ -1284,3 +1213,6 @@
     window.addEventListener("load",()=>{navigator.serviceWorker.register("/sw.js").catch(()=>{});});
   }
 </script>
+
+<script src="checkout.js?v=20260928"></script>
+<script src="promocoes.js?v=20260928"></script>
