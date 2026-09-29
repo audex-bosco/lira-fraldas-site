@@ -6,13 +6,15 @@
    - SÓ intercepta same-origin  -> não toca em wa.me / instagram / terceiros.
    - Não cacheia POST nem query de navegação externa.
 */
-const CACHE = 'lira-loja-v3';
+const CACHE = 'lira-loja-v4';
 const CORE = [
   // A loja é a raiz (index.html). Até 03/08/26 este pré-cache e o fallback offline
   // abaixo ainda apontavam para '/02-loja-pratica.html', uma versão anterior da
   // loja: quem ficasse offline caía numa página que não é mais a oficial.
   '/',
   '/produtos.js',
+  '/checkout.js?v=20260928',
+  '/promocoes.js?v=20260928',
   '/logo.png',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
@@ -39,7 +41,7 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin) return;  // só same-origin (sem vazamento p/ WhatsApp/externos)
 
   const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
-  const isData = url.pathname.endsWith('produtos.js');
+  const isData = ['produtos.js', 'checkout.js', 'promocoes.js'].some(name => url.pathname.endsWith(name));
 
   if (isHTML || isData) {
     // network-first: sempre tenta o fresco; cai no cache só offline
